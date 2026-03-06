@@ -28,10 +28,5 @@ dist-ssr
 .env.local
 .env.*.local
 
-# Supabase
-supabase/.branches
-supabase/.temp
-
-supabase*
-
-.env.example
+# Supabase (only ignore the supabase folder for edge functions)
+/supabase/
