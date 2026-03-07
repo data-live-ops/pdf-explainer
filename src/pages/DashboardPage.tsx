@@ -10,19 +10,27 @@ import {
   Play,
   Tag,
   Layers,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { PDFUploader } from '../components/PDFUploader';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { useDocuments } from '../hooks/useDocuments';
+import { useAuth } from '../hooks/useAuth';
 import { DocumentWithAnalysis } from '../lib/types';
+
+const ITEMS_PER_PAGE = 10;
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const { documents, loading, createDocument, deleteDocument } = useDocuments();
+  const { user, signOut } = useAuth();
   const [isUploading, setIsUploading] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleFileSelect = async (file: File) => {
     setIsUploading(true);
@@ -45,6 +53,11 @@ export function DashboardPage() {
     navigate(`/processing/${id}`);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   // Group documents by status
   const pendingDocs = documents.filter(
     (d) => d.status === 'uploaded' || d.status === 'processing'
@@ -52,6 +65,16 @@ export function DashboardPage() {
   const analyzedDocs = documents.filter(
     (d) => d.status === 'analyzed' || d.status === 'verified' || d.status === 'exported'
   );
+
+  // Pagination for analyzed docs
+  const totalPages = Math.ceil(analyzedDocs.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedAnalyzedDocs = analyzedDocs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Reset to page 1 if current page exceeds total pages
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -81,6 +104,10 @@ export function DashboardPage() {
               <Button onClick={() => setShowUploader(!showUploader)}>
                 <Upload size={16} className="mr-2" />
                 Upload PDF
+              </Button>
+              <Button variant="ghost" onClick={handleLogout} title={user?.email}>
+                <LogOut size={16} className="mr-2" />
+                Logout
               </Button>
             </div>
           </div>
@@ -194,11 +221,18 @@ export function DashboardPage() {
             {/* Analyzed Documents */}
             {analyzedDocs.length > 0 && (
               <section>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Analyzed Documents
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Analyzed Documents
+                  </h2>
+                  {totalPages > 1 && (
+                    <span className="text-sm text-gray-500">
+                      Showing {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, analyzedDocs.length)} of {analyzedDocs.length}
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-3">
-                  {analyzedDocs.map((doc) => (
+                  {paginatedAnalyzedDocs.map((doc) => (
                     <DocumentRow
                       key={doc.id}
                       document={doc}
@@ -207,6 +241,43 @@ export function DashboardPage() {
                     />
                   ))}
                 </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft size={16} className="mr-1" />
+                      Previous
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <Button
+                          key={page}
+                          variant={page === currentPage ? 'primary' : 'ghost'}
+                          size="sm"
+                          onClick={() => setCurrentPage(page)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {page}
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight size={16} className="ml-1" />
+                    </Button>
+                  </div>
+                )}
               </section>
             )}
           </div>
