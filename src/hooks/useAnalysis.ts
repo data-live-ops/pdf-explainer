@@ -4,7 +4,6 @@ import {
   AnalysisResult,
   AnalyzeResponse,
   VerifyResponse,
-  GeminiCheckResult,
   ExportedJSON,
   Category,
 } from '../lib/types';
