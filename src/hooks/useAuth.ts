@@ -2,65 +2,69 @@ import { useState, useEffect, useCallback } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
-const ALLOWED_DOMAIN = '@colearn.id';
+const ALLOWED_DOMAIN = 'colearn.id';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const validateEmailDomain = (email: string | undefined): boolean => {
+    if (!email) return false;
+    const domain = email.split('@')[1];
+    return domain === ALLOWED_DOMAIN;
+  };
+
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        // Validate email domain
+        if (!validateEmailDomain(session.user.email)) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setError(`Only @${ALLOWED_DOMAIN} email addresses are allowed`);
+        } else {
+          setUser(session.user);
+        }
+      }
       setLoading(false);
     });
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        // Validate email domain on sign in
+        if (!validateEmailDomain(session.user.email)) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setError(`Only @${ALLOWED_DOMAIN} email addresses are allowed`);
+        } else {
+          setUser(session.user);
+          setError(null);
+        }
+      } else {
+        setUser(null);
+      }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signInWithGoogle = useCallback(async () => {
     setError(null);
 
-    // Validate email domain
-    if (!email.endsWith(ALLOWED_DOMAIN)) {
-      setError(`Only ${ALLOWED_DOMAIN} email addresses are allowed`);
-      return false;
-    }
-
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (authError) {
-      setError(authError.message);
-      return false;
-    }
-
-    return true;
-  }, []);
-
-  const signUp = useCallback(async (email: string, password: string) => {
-    setError(null);
-
-    // Validate email domain
-    if (!email.endsWith(ALLOWED_DOMAIN)) {
-      setError(`Only ${ALLOWED_DOMAIN} email addresses are allowed`);
-      return false;
-    }
-
-    const { error: authError } = await supabase.auth.signUp({
-      email,
-      password,
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: {
+          hd: ALLOWED_DOMAIN, // Restrict to colearn.id domain in Google picker
+        },
+        redirectTo: window.location.origin,
+      },
     });
 
     if (authError) {
@@ -80,32 +84,12 @@ export function useAuth() {
     return true;
   }, []);
 
-  const resetPassword = useCallback(async (email: string) => {
-    setError(null);
-
-    if (!email.endsWith(ALLOWED_DOMAIN)) {
-      setError(`Only ${ALLOWED_DOMAIN} email addresses are allowed`);
-      return false;
-    }
-
-    const { error: authError } = await supabase.auth.resetPasswordForEmail(email);
-
-    if (authError) {
-      setError(authError.message);
-      return false;
-    }
-
-    return true;
-  }, []);
-
   return {
     user,
     loading,
     error,
-    signIn,
-    signUp,
+    signInWithGoogle,
     signOut,
-    resetPassword,
     clearError: () => setError(null),
   };
 }
