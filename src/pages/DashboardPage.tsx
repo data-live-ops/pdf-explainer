@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Play,
   Tag,
+  Layers,
 } from 'lucide-react';
 import { PDFUploader } from '../components/PDFUploader';
 import { Card, CardContent } from '../components/ui/Card';
@@ -68,6 +69,10 @@ export function DashboardPage() {
               <Button variant="ghost" onClick={() => navigate('/categories')}>
                 <Tag size={16} className="mr-2" />
                 Categories
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/combiner')}>
+                <Layers size={16} className="mr-2" />
+                Combine JSON
               </Button>
               <Button variant="outline" onClick={() => navigate('/create-pdf')}>
                 <ImagePlus size={16} className="mr-2" />

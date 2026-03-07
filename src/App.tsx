@@ -4,6 +4,7 @@ import { CreatePDFPage } from './pages/CreatePDFPage';
 import { CategoriesPage } from './pages/CategoriesPage';
 import { ProcessingPage } from './pages/ProcessingPage';
 import { VerificationPage } from './pages/VerificationPage';
+import { CombinerPage } from './pages/CombinerPage';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/categories" element={<CategoriesPage />} />
         <Route path="/processing/:id" element={<ProcessingPage />} />
         <Route path="/verification/:id" element={<VerificationPage />} />
+        <Route path="/combiner" element={<CombinerPage />} />
       </Routes>
     </BrowserRouter>
   );
