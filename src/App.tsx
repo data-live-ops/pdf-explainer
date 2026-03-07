@@ -5,17 +5,62 @@ import { CategoriesPage } from './pages/CategoriesPage';
 import { ProcessingPage } from './pages/ProcessingPage';
 import { VerificationPage } from './pages/VerificationPage';
 import { CombinerPage } from './pages/CombinerPage';
+import { LoginPage } from './pages/LoginPage';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/create-pdf" element={<CreatePDFPage />} />
-        <Route path="/categories" element={<CategoriesPage />} />
-        <Route path="/processing/:id" element={<ProcessingPage />} />
-        <Route path="/verification/:id" element={<VerificationPage />} />
-        <Route path="/combiner" element={<CombinerPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/create-pdf"
+          element={
+            <ProtectedRoute>
+              <CreatePDFPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/categories"
+          element={
+            <ProtectedRoute>
+              <CategoriesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/processing/:id"
+          element={
+            <ProtectedRoute>
+              <ProcessingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/verification/:id"
+          element={
+            <ProtectedRoute>
+              <VerificationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/combiner"
+          element={
+            <ProtectedRoute>
+              <CombinerPage />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );
