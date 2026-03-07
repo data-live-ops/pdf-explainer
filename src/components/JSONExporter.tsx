@@ -26,7 +26,7 @@ export function JSONExporter({ data, onExport }: JSONExporterProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${data.filename.replace('.pdf', '')}_analysis.json`;
+    a.download = `${data.id}_analysis.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -81,69 +81,15 @@ export function JSONExporter({ data, onExport }: JSONExporterProps) {
         <div className="mt-4 p-4 bg-gray-50 rounded-lg">
           <h4 className="text-sm font-medium text-gray-700 mb-2">Export Summary</h4>
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <dt className="text-gray-500">Filename:</dt>
-            <dd className="text-gray-900">{data.filename}</dd>
-            <dt className="text-gray-500">Subject:</dt>
-            <dd className="text-gray-900 capitalize">{data.subject}</dd>
-            <dt className="text-gray-500">Verified:</dt>
-            <dd className="text-gray-900">
-              {data.verification.isVerified ? 'Yes' : 'No'}
-            </dd>
-            <dt className="text-gray-500">Confidence:</dt>
-            <dd className="text-gray-900">
-              {(data.verification.confidence * 100).toFixed(0)}%
-            </dd>
+            <dt className="text-gray-500">Category:</dt>
+            <dd className="text-gray-900">{data.category}</dd>
+            <dt className="text-gray-500">Source:</dt>
+            <dd className="text-gray-900">{data.source_origin}</dd>
+            <dt className="text-gray-500">Answers:</dt>
+            <dd className="text-gray-900">{data.answer_latex?.length || 0}</dd>
           </dl>
         </div>
       </CardContent>
     </Card>
   );
-}
-
-export function createExportJSON(
-  documentId: string,
-  filename: string,
-  analysis: { diketahui: string; ditanya: string; jawaban: string },
-  verification: { isVerified: boolean; confidence: number }
-): ExportedJSON {
-  // Detect subject from content
-  const content = `${analysis.diketahui} ${analysis.ditanya} ${analysis.jawaban}`.toLowerCase();
-  let subject = 'unknown';
-
-  if (content.includes('equation') || content.includes('integral') ||
-      content.includes('derivative') || content.includes('limit') ||
-      content.includes('x^2') || content.includes('\\frac') ||
-      content.includes('algebra') || content.includes('calculus')) {
-    subject = 'mathematics';
-  } else if (content.includes('force') || content.includes('mass') ||
-             content.includes('velocity') || content.includes('energy') ||
-             content.includes('newton') || content.includes('joule') ||
-             content.includes('acceleration') || content.includes('momentum')) {
-    subject = 'physics';
-  } else if (content.includes('mol') || content.includes('reaction') ||
-             content.includes('solution') || content.includes('atom') ||
-             content.includes('molecule') || content.includes('chemical') ||
-             content.includes('element') || content.includes('compound')) {
-    subject = 'chemistry';
-  }
-
-  return {
-    id: documentId,
-    filename,
-    subject,
-    analysis: {
-      given: analysis.diketahui,
-      find: analysis.ditanya,
-      solution: analysis.jawaban,
-    },
-    verification: {
-      isVerified: verification.isVerified,
-      checkedBy: 'gemini',
-      confidence: verification.confidence,
-    },
-    metadata: {
-      createdAt: new Date().toISOString(),
-      exportedAt: new Date().toISOString(),
-    },
-  };
 }

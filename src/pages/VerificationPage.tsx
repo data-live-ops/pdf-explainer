@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, FileText } from 'lucide-react';
-import { ResultEditor } from '../components/ResultEditor';
+import { AnalysisEditor } from '../components/AnalysisEditor';
 import { VerificationPanel } from '../components/VerificationPanel';
-import { JSONExporter, createExportJSON } from '../components/JSONExporter';
+import { JSONExporter } from '../components/JSONExporter';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
 import { useDocument } from '../hooks/useDocuments';
 import { useAnalysis } from '../hooks/useAnalysis';
-import { ExportedJSON } from '../lib/types';
+import { useCategories } from '../hooks/useCategories';
+import { ExportedJSON, AnalysisResult } from '../lib/types';
 
 export function VerificationPage() {
   const { id } = useParams<{ id: string }>();
@@ -21,9 +22,12 @@ export function VerificationPage() {
     fetchAnalysis,
     verifyAnalysis,
     updateAnalysis,
+    uploadImage,
     approveAnalysis,
     rejectAnalysis,
+    exportToJSON,
   } = useAnalysis(id);
+  const { categories } = useCategories();
 
   const [isVerifying, setIsVerifying] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -38,22 +42,21 @@ export function VerificationPage() {
   useEffect(() => {
     // Generate export data when analysis is verified
     if (analysis && document && analysis.verification_status === 'verified') {
-      const data = createExportJSON(
-        document.id,
-        document.filename,
-        {
-          diketahui: analysis.diketahui,
-          ditanya: analysis.ditanya,
-          jawaban: analysis.jawaban,
-        },
-        {
-          isVerified: true,
-          confidence: analysis.gemini_check?.confidence || 0,
-        }
-      );
+      const category = categories.find((c) => c.id === analysis.category_id);
+      const data: ExportedJSON = {
+        id: document.id,
+        question_latex: analysis.question_latex || '',
+        question_image: analysis.question_image,
+        question_description: analysis.question_description || '',
+        category: category?.name || 'Uncategorized',
+        source_origin: analysis.source_origin || 'Expert-Generated',
+        solution_latex: analysis.solution_latex || { given: '', find: '', solution: '' },
+        solution_image: analysis.solution_image,
+        answer_latex: analysis.answer_latex || [],
+      };
       setExportData(data);
     }
-  }, [analysis, document]);
+  }, [analysis, document, categories]);
 
   const handleVerify = async () => {
     setIsVerifying(true);
@@ -61,14 +64,17 @@ export function VerificationPage() {
     setIsVerifying(false);
   };
 
-  const handleSave = async (data: {
-    diketahui: string;
-    ditanya: string;
-    jawaban: string;
-  }) => {
+  const handleSave = async (data: Partial<AnalysisResult>) => {
     setIsSaving(true);
     await updateAnalysis(data);
     setIsSaving(false);
+  };
+
+  const handleImageUpload = async (
+    type: 'question' | 'solution',
+    file: File
+  ): Promise<string | null> => {
+    return await uploadImage(type, file);
   };
 
   const handleApprove = async () => {
@@ -78,6 +84,12 @@ export function VerificationPage() {
   const handleReject = async () => {
     const notes = prompt('Reason for rejection (optional):');
     await rejectAnalysis(notes || undefined);
+  };
+
+  const handleExport = async () => {
+    if (!document || !analysis) return;
+    const category = categories.find((c) => c.id === analysis.category_id);
+    await exportToJSON(category || null);
   };
 
   if (docLoading || analysisLoading) {
@@ -102,7 +114,7 @@ export function VerificationPage() {
                 onClick={() => navigate('/')}
               >
                 <ArrowLeft size={16} className="mr-2" />
-                Back to Home
+                Back to Dashboard
               </Button>
             </CardContent>
           </Card>
@@ -117,7 +129,7 @@ export function VerificationPage() {
         <div className="max-w-4xl mx-auto px-4">
           <Button variant="ghost" className="mb-6" onClick={() => navigate('/')}>
             <ArrowLeft size={16} className="mr-2" />
-            Back to Home
+            Back to Dashboard
           </Button>
 
           <Card>
@@ -145,13 +157,13 @@ export function VerificationPage() {
       <div className="max-w-4xl mx-auto px-4">
         <Button variant="ghost" className="mb-6" onClick={() => navigate('/')}>
           <ArrowLeft size={16} className="mr-2" />
-          Back to Home
+          Back to Dashboard
         </Button>
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">{document.filename}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Created {new Date(document.created_at).toLocaleDateString('id-ID', {
+            Created {new Date(document.created_at).toLocaleDateString('en-US', {
               day: 'numeric',
               month: 'long',
               year: 'numeric',
@@ -162,12 +174,12 @@ export function VerificationPage() {
         </div>
 
         <div className="space-y-6">
-          {/* Analysis Result Editor */}
-          <ResultEditor
-            diketahui={analysis.diketahui}
-            ditanya={analysis.ditanya}
-            jawaban={analysis.jawaban}
+          {/* Analysis Editor */}
+          <AnalysisEditor
+            analysis={analysis}
+            categories={categories}
             onSave={handleSave}
+            onImageUpload={handleImageUpload}
             isSaving={isSaving}
           />
 
@@ -183,7 +195,7 @@ export function VerificationPage() {
 
           {/* JSON Export - Only show when verified */}
           {analysis.verification_status === 'verified' && exportData && (
-            <JSONExporter data={exportData} />
+            <JSONExporter data={exportData} onExport={handleExport} />
           )}
 
           {/* Show existing export if available */}

@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, STORAGE_BUCKET } from '../lib/supabase';
 import {
   AnalysisResult,
   AnalyzeResponse,
   VerifyResponse,
   GeminiCheckResult,
   ExportedJSON,
+  Category,
 } from '../lib/types';
 
 export function useAnalysis(documentId: string | undefined) {
@@ -77,9 +78,13 @@ export function useAnalysis(documentId: string | undefined) {
         {
           body: {
             analysisId: analysis.id,
-            diketahui: analysis.diketahui,
-            ditanya: analysis.ditanya,
-            jawaban: analysis.jawaban,
+            question_latex: analysis.question_latex,
+            solution_latex: analysis.solution_latex,
+            answer_latex: analysis.answer_latex,
+            // Legacy fields for backwards compatibility
+            diketahui: analysis.diketahui || analysis.solution_latex?.given,
+            ditanya: analysis.ditanya || analysis.solution_latex?.find,
+            jawaban: analysis.jawaban || analysis.solution_latex?.solution,
           },
         }
       );
@@ -100,7 +105,7 @@ export function useAnalysis(documentId: string | undefined) {
   };
 
   const updateAnalysis = async (
-    updates: Partial<Pick<AnalysisResult, 'diketahui' | 'ditanya' | 'jawaban'>>
+    updates: Partial<AnalysisResult>
   ): Promise<boolean> => {
     if (!analysis) return false;
 
@@ -122,6 +127,30 @@ export function useAnalysis(documentId: string | undefined) {
     await fetchAnalysis();
     setLoading(false);
     return true;
+  };
+
+  const uploadImage = async (
+    type: 'question' | 'solution',
+    file: File
+  ): Promise<string | null> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${documentId}/${type}_${Date.now()}.${fileExt}`;
+    const filePath = `images/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(filePath, file);
+
+    if (uploadError) {
+      setError(uploadError.message);
+      return null;
+    }
+
+    const { data } = supabase.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
   };
 
   const approveAnalysis = async (): Promise<boolean> => {
@@ -178,29 +207,20 @@ export function useAnalysis(documentId: string | undefined) {
   };
 
   const exportToJSON = async (
-    filename: string,
-    geminiCheck: GeminiCheckResult | null
+    category: Category | null
   ): Promise<ExportedJSON | null> => {
     if (!analysis || !documentId) return null;
 
     const exportData: ExportedJSON = {
       id: documentId,
-      filename,
-      subject: detectSubject(analysis),
-      analysis: {
-        given: analysis.diketahui,
-        find: analysis.ditanya,
-        solution: analysis.jawaban,
-      },
-      verification: {
-        isVerified: analysis.verification_status === 'verified',
-        checkedBy: 'gemini',
-        confidence: geminiCheck?.confidence || 0,
-      },
-      metadata: {
-        createdAt: analysis.created_at,
-        exportedAt: new Date().toISOString(),
-      },
+      question_latex: analysis.question_latex || '',
+      question_image: analysis.question_image,
+      question_description: analysis.question_description || '',
+      category: category?.name || 'Uncategorized',
+      source_origin: analysis.source_origin || 'Expert-Generated',
+      solution_latex: analysis.solution_latex || { given: '', find: '', solution: '' },
+      solution_image: analysis.solution_image,
+      answer_latex: analysis.answer_latex || [],
     };
 
     // Save to database
@@ -238,54 +258,9 @@ export function useAnalysis(documentId: string | undefined) {
     analyzeDocument,
     verifyAnalysis,
     updateAnalysis,
+    uploadImage,
     approveAnalysis,
     rejectAnalysis,
     exportToJSON,
   };
-}
-
-function detectSubject(analysis: AnalysisResult): string {
-  const content =
-    `${analysis.diketahui} ${analysis.ditanya} ${analysis.jawaban}`.toLowerCase();
-
-  if (
-    content.includes('equation') ||
-    content.includes('integral') ||
-    content.includes('derivative') ||
-    content.includes('limit') ||
-    content.includes('x^2') ||
-    content.includes('\\frac') ||
-    content.includes('algebra') ||
-    content.includes('calculus')
-  ) {
-    return 'mathematics';
-  }
-
-  if (
-    content.includes('force') ||
-    content.includes('mass') ||
-    content.includes('velocity') ||
-    content.includes('energy') ||
-    content.includes('newton') ||
-    content.includes('joule') ||
-    content.includes('acceleration') ||
-    content.includes('momentum')
-  ) {
-    return 'physics';
-  }
-
-  if (
-    content.includes('mol') ||
-    content.includes('reaction') ||
-    content.includes('solution') ||
-    content.includes('atom') ||
-    content.includes('molecule') ||
-    content.includes('chemical') ||
-    content.includes('element') ||
-    content.includes('compound')
-  ) {
-    return 'chemistry';
-  }
-
-  return 'unknown';
 }

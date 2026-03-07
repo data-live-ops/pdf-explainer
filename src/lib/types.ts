@@ -19,6 +19,13 @@ export interface Document {
   updated_at: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
 export interface GeminiCheckResult {
   typos: string[];
   errors: string[];
@@ -27,12 +34,38 @@ export interface GeminiCheckResult {
   confidence: number;
 }
 
+// New analysis format
+export interface AnalysisData {
+  question_latex: string;
+  question_description: string;
+  solution_latex: {
+    given: string;
+    find: string;
+    solution: string;
+  };
+  answer_latex: string[];
+}
+
 export interface AnalysisResult {
   id: string;
   document_id: string;
-  diketahui: string;
-  ditanya: string;
-  jawaban: string;
+  // New fields
+  question_latex: string;
+  question_image?: string;
+  question_description: string;
+  category_id?: string;
+  source_origin: string;
+  solution_latex: {
+    given: string;
+    find: string;
+    solution: string;
+  };
+  solution_image?: string;
+  answer_latex: string[];
+  // Legacy fields (for backwards compatibility)
+  diketahui?: string;
+  ditanya?: string;
+  jawaban?: string;
   raw_response: Record<string, unknown>;
   verification_status: VerificationStatus;
   verification_notes: string | null;
@@ -44,22 +77,18 @@ export interface AnalysisResult {
 
 export interface ExportedJSON {
   id: string;
-  filename: string;
-  subject: string;
-  analysis: {
+  question_latex: string;
+  question_image?: string;
+  question_description: string;
+  category: string;
+  source_origin: string;
+  solution_latex: {
     given: string;
     find: string;
     solution: string;
   };
-  verification: {
-    isVerified: boolean;
-    checkedBy: string;
-    confidence: number;
-  };
-  metadata: {
-    createdAt: string;
-    exportedAt: string;
-  };
+  solution_image?: string;
+  answer_latex: string[];
 }
 
 export interface DocumentWithAnalysis extends Document {
@@ -68,11 +97,7 @@ export interface DocumentWithAnalysis extends Document {
 
 export interface AnalyzeResponse {
   success: boolean;
-  data?: {
-    diketahui: string;
-    ditanya: string;
-    jawaban: string;
-  };
+  data?: AnalysisData;
   error?: string;
 }
 
