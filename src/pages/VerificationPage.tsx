@@ -51,9 +51,12 @@ export function VerificationPage() {
         category: category?.name || 'Uncategorized',
         source_origin: analysis.source_origin || 'Expert-Generated',
         solution_latex: analysis.solution_latex || { given: '', find: '', solution: '' },
-        solution_image: analysis.solution_image,
         answer_latex: analysis.answer_latex || [],
       };
+      // Only include solution_image if it has a value
+      if (analysis.solution_image) {
+        data.solution_image = analysis.solution_image;
+      }
       setExportData(data);
     }
   }, [analysis, document, categories]);
