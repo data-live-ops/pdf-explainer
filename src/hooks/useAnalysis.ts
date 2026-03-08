@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase, STORAGE_BUCKET } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import {
   AnalysisResult,
   AnalyzeResponse,
@@ -132,24 +132,55 @@ export function useAnalysis(documentId: string | undefined) {
     type: 'question' | 'solution',
     file: File
   ): Promise<string | null> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${documentId}/${type}_${Date.now()}.${fileExt}`;
-    const filePath = `images/${fileName}`;
+    try {
+      // Convert file to base64
+      const base64 = await fileToBase64(file);
+      const fileExt = file.name.split('.').pop() || 'png';
+      const fileName = `${type}_${documentId}_${Date.now()}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(filePath, file);
+      // Upload to Google Drive via Edge Function
+      const { data, error: uploadError } = await supabase.functions.invoke(
+        'upload-to-drive',
+        {
+          body: {
+            fileData: base64,
+            fileName,
+            mimeType: file.type || 'image/png',
+          },
+        }
+      );
 
-    if (uploadError) {
-      setError(uploadError.message);
+      if (uploadError) {
+        setError(uploadError.message);
+        return null;
+      }
+
+      if (!data.success) {
+        setError(data.error || 'Upload failed');
+        return null;
+      }
+
+      return data.url;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      setError(message);
       return null;
     }
+  };
 
-    const { data } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(filePath);
-
-    return data.publicUrl;
+  // Helper function to convert File to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = (error) => reject(error);
+    });
   };
 
   const approveAnalysis = async (): Promise<boolean> => {
