@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Square,
   CheckSquare,
+  GripVertical,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -21,20 +22,31 @@ export function CombinerPage() {
   const navigate = useNavigate();
   const { documents, loading } = useDocuments();
   const { categories } = useCategories();
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Use array instead of Set to maintain order
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
 
   // Filter verified/exported docs
   const eligibleDocs = documents.filter(
     (d) => d.status === 'verified' || d.status === 'exported'
   );
 
-  // Generate export data for each selected document
+  // Create a map for quick lookup
+  const docsMap = useMemo(() => {
+    const map = new Map<string, DocumentWithAnalysis>();
+    eligibleDocs.forEach((doc) => map.set(doc.id, doc));
+    return map;
+  }, [eligibleDocs]);
+
+  // Generate export data for each selected document in order
   const combinedData = useMemo(() => {
-    return eligibleDocs
-      .filter((d) => selectedIds.has(d.id))
-      .map((doc) => {
+    return selectedIds
+      .map((id) => {
+        const doc = docsMap.get(id);
+        if (!doc) return null;
+
         const analysis = doc.analysis_results?.[0];
         if (!analysis) return null;
 
@@ -60,26 +72,65 @@ export function CombinerPage() {
         return exportData;
       })
       .filter(Boolean) as ExportedJSON[];
-  }, [eligibleDocs, selectedIds, categories]);
+  }, [selectedIds, docsMap, categories]);
 
   const jsonString = JSON.stringify(combinedData, null, 2);
 
   const handleToggle = (id: string) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedIds(newSelected);
+    setSelectedIds((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((i) => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === eligibleDocs.length) {
-      setSelectedIds(new Set());
+    if (selectedIds.length === eligibleDocs.length) {
+      setSelectedIds([]);
     } else {
-      setSelectedIds(new Set(eligibleDocs.map((d) => d.id)));
+      setSelectedIds(eligibleDocs.map((d) => d.id));
     }
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      return;
+    }
+
+    setSelectedIds((prev) => {
+      const newOrder = [...prev];
+      const draggedIndex = newOrder.indexOf(draggedId);
+      const targetIndex = newOrder.indexOf(targetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) return prev;
+
+      // Remove dragged item and insert at target position
+      newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedId);
+
+      return newOrder;
+    });
+
+    setDraggedId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
   };
 
   const handleCopy = async () => {
@@ -100,7 +151,13 @@ export function CombinerPage() {
     URL.revokeObjectURL(url);
   };
 
-  const allSelected = eligibleDocs.length > 0 && selectedIds.size === eligibleDocs.length;
+  const allSelected = eligibleDocs.length > 0 && selectedIds.length === eligibleDocs.length;
+
+  // Separate selected (ordered) and unselected docs
+  const selectedDocs = selectedIds
+    .map((id) => docsMap.get(id))
+    .filter(Boolean) as DocumentWithAnalysis[];
+  const unselectedDocs = eligibleDocs.filter((d) => !selectedIds.includes(d.id));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -160,7 +217,7 @@ export function CombinerPage() {
                 </div>
                 <div className="flex items-center gap-4">
                   <span className="text-sm text-gray-600">
-                    Selected: {selectedIds.size} documents
+                    Selected: {selectedIds.length} documents
                   </span>
                   <Button variant="outline" size="sm" onClick={handleSelectAll}>
                     {allSelected ? (
@@ -178,21 +235,57 @@ export function CombinerPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  {eligibleDocs.map((doc) => (
-                    <DocumentItem
-                      key={doc.id}
-                      document={doc}
-                      selected={selectedIds.has(doc.id)}
-                      onToggle={() => handleToggle(doc.id)}
-                    />
-                  ))}
-                </div>
+                {/* Selected Documents (Draggable) */}
+                {selectedDocs.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">
+                      Selected (drag to reorder):
+                    </p>
+                    <div className="space-y-2">
+                      {selectedDocs.map((doc, index) => (
+                        <DocumentItem
+                          key={doc.id}
+                          document={doc}
+                          selected={true}
+                          index={index + 1}
+                          onToggle={() => handleToggle(doc.id)}
+                          draggable={true}
+                          isDragging={draggedId === doc.id}
+                          onDragStart={(e) => handleDragStart(e, doc.id)}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, doc.id)}
+                          onDragEnd={handleDragEnd}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unselected Documents */}
+                {unselectedDocs.length > 0 && (
+                  <div>
+                    {selectedDocs.length > 0 && (
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        Available:
+                      </p>
+                    )}
+                    <div className="space-y-2">
+                      {unselectedDocs.map((doc) => (
+                        <DocumentItem
+                          key={doc.id}
+                          document={doc}
+                          selected={false}
+                          onToggle={() => handleToggle(doc.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Export Section */}
-            {selectedIds.size > 0 && (
+            {selectedIds.length > 0 && (
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -244,7 +337,7 @@ export function CombinerPage() {
                     </h4>
                     <dl className="grid grid-cols-2 gap-2 text-sm">
                       <dt className="text-gray-500">Documents:</dt>
-                      <dd className="text-gray-900">{selectedIds.size}</dd>
+                      <dd className="text-gray-900">{selectedIds.length}</dd>
                       <dt className="text-gray-500">Total Items:</dt>
                       <dd className="text-gray-900">{combinedData.length}</dd>
                     </dl>
@@ -262,10 +355,28 @@ export function CombinerPage() {
 interface DocumentItemProps {
   document: DocumentWithAnalysis;
   selected: boolean;
+  index?: number;
   onToggle: () => void;
+  draggable?: boolean;
+  isDragging?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }
 
-function DocumentItem({ document, selected, onToggle }: DocumentItemProps) {
+function DocumentItem({
+  document,
+  selected,
+  index,
+  onToggle,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: DocumentItemProps) {
   const getStatusBadge = () => {
     if (document.status === 'verified') {
       return (
@@ -283,18 +394,46 @@ function DocumentItem({ document, selected, onToggle }: DocumentItemProps) {
 
   return (
     <div
-      className={`flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-colors ${
+      className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
         selected
           ? 'border-blue-500 bg-blue-50'
           : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+      } ${isDragging ? 'opacity-50 scale-[0.98]' : ''} ${
+        draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       }`}
-      onClick={onToggle}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
     >
-      <div className="text-blue-600">
+      {/* Drag Handle */}
+      {draggable && (
+        <div className="text-gray-400 hover:text-gray-600">
+          <GripVertical size={18} />
+        </div>
+      )}
+
+      {/* Index Badge */}
+      {selected && index !== undefined && (
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-medium flex items-center justify-center">
+          {index}
+        </div>
+      )}
+
+      {/* Checkbox */}
+      <div
+        className="text-blue-600 cursor-pointer flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggle();
+        }}
+      >
         {selected ? <CheckSquare size={20} /> : <Square size={20} />}
       </div>
 
-      <div className="flex-1 min-w-0">
+      {/* Document Info */}
+      <div className="flex-1 min-w-0" onClick={onToggle}>
         <p className="font-medium text-gray-900 truncate">{document.filename}</p>
         <p className="text-sm text-gray-500">
           {new Date(document.created_at).toLocaleDateString('en-US', {
