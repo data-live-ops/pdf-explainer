@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Download,
@@ -14,11 +14,13 @@ import { Card, CardContent, CardHeader } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Spinner } from '../components/ui/Spinner';
 import { useDocuments } from '../hooks/useDocuments';
-import { DocumentWithAnalysis } from '../lib/types';
+import { useCategories } from '../hooks/useCategories';
+import { DocumentWithAnalysis, ExportedJSON } from '../lib/types';
 
 export function CombinerPage() {
   const navigate = useNavigate();
   const { documents, loading } = useDocuments();
+  const { categories } = useCategories();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -28,11 +30,37 @@ export function CombinerPage() {
     (d) => d.status === 'verified' || d.status === 'exported'
   );
 
-  // Get final_json from selected docs
-  const combinedData = eligibleDocs
-    .filter((d) => selectedIds.has(d.id))
-    .map((d) => d.analysis_results?.[0]?.final_json)
-    .filter(Boolean);
+  // Generate export data for each selected document
+  const combinedData = useMemo(() => {
+    return eligibleDocs
+      .filter((d) => selectedIds.has(d.id))
+      .map((doc) => {
+        const analysis = doc.analysis_results?.[0];
+        if (!analysis) return null;
+
+        // Use final_json if available (exported docs), otherwise generate it
+        if (analysis.final_json) {
+          return analysis.final_json;
+        }
+
+        // Generate export data on-the-fly for verified docs
+        const category = categories.find((c) => c.id === analysis.category_id);
+        const exportData: ExportedJSON = {
+          id: doc.id,
+          question_latex: analysis.question_latex || '',
+          question_image: analysis.question_image,
+          question_description: analysis.question_description || '',
+          category: category?.name || 'Uncategorized',
+          source_origin: analysis.source_origin || 'Expert-Generated',
+          solution_latex: analysis.solution_latex || { given: '', find: '', solution: '' },
+          solution_image: analysis.solution_image,
+          answer_latex: analysis.answer_latex || [],
+        };
+
+        return exportData;
+      })
+      .filter(Boolean) as ExportedJSON[];
+  }, [eligibleDocs, selectedIds, categories]);
 
   const jsonString = JSON.stringify(combinedData, null, 2);
 
